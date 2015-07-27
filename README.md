@@ -11,7 +11,4 @@ This software enables system admin to gain remote access to **his** machine usin
 - screenshot tool
 - message to the victim (messageBox)
 - keylogger
-
-### Planned:
-
-- *.exe* download & execute
+- URL downloader
