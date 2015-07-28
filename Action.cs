@@ -10,5 +10,6 @@ namespace RAT
         public const string KEYLOGGER_DUMP = "keylogger-dump";
         public const string SHOW_MESSAGE = "show-message";
         public const string DOWNLOAD_FILE = "download-file";
+        public const string SELF_DELETE = "self-delete";
     }
 }

