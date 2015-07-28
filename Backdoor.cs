@@ -104,8 +104,8 @@ namespace RAT
             ShellReaderThread.Start();
 
             // welcome message
-            OutStream.WriteLine(String.Format("  Welcome to {0} RAT  ", Name).AlignCenter(80, '='));
-            OutStream.WriteLine("  SINGLE-USER MODE  ".AlignCenter(80, '='));
+            OutStream.WriteLine(StringExtensions.AlignCenter(String.Format("  Welcome to {0} RAT  ", Name), 80, '='));
+            OutStream.WriteLine(StringExtensions.AlignCenter("  SINGLE-USER MODE  ", 80, '='));
 
             InputLoop();
         }
@@ -231,7 +231,7 @@ namespace RAT
                         CloseShell();
                         Application.Exit();
                     }
-                    
+
                     break;
                 case RatAction.QUIT:
                     OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");

