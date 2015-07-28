@@ -12,3 +12,10 @@ This software enables system admin to gain remote access to **his** machine usin
 - message to the victim (messageBox)
 - keylogger
 - URL downloader
+- self deletion (Vista+)
+- process list
+
+
+## System requirements
+- Windows XP+  
+- .NET Framework 3.0

