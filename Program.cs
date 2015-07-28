@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
 
 namespace RAT
 {
@@ -23,7 +20,6 @@ namespace RAT
                 {
                     bd.NextConnection();
                 }
-                bd.Stop();
             }
             catch (Exception) { }
             Console.CancelKeyPress += ConsoleCancelPress;
@@ -32,6 +28,7 @@ namespace RAT
         private static void ConsoleCancelPress(object sender, ConsoleCancelEventArgs e)
         {
             bd.DropConnection();
+            bd.Stop();
         }
     }
 }
