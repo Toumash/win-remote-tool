@@ -16,5 +16,16 @@ namespace RAT
             sb.Append(source);
             return sb.ToString().PadRight(finalLength, padChar);
         }
+
+        public static string GenerateNStrings(int n,string x)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            for (int i = 0; i < n; i++)
+            {
+                sb.Append(x);
+            }
+            return sb.ToString();
+        }
     }
 }

