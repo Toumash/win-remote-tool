@@ -47,7 +47,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Action.cs" />
     <Compile Include="KeyLogger.cs" />
     <Compile Include="Backdoor.cs" />
     <Compile Include="NetworkHelper.cs" />
